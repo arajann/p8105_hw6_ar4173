@@ -1,0 +1,73 @@
+---
+title: "p8105_hw6_ar4173"
+author: "Anand Rajan"
+date: "12/2/2021"
+output: github_document
+---
+
+```{r setup, include=FALSE}
+library(tidyverse)
+library(modelr)
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Problem 1
+
+```{r}
+birthweight =
+  read_csv(file = "./data/birthweight.csv")
+
+birthweight %>% 
+  janitor::clean_names() %>% 
+  drop_na()
+  
+```
+
+
+```{r}
+ fit =
+  lm(bwt ~ )
+```
+
+
+
+## Problem 2
+
+```{r}
+weather_df = 
+  rnoaa::meteo_pull_monitors(
+    c("USW00094728"),
+    var = c("PRCP", "TMIN", "TMAX"), 
+    date_min = "2017-01-01",
+    date_max = "2017-12-31") %>%
+  mutate(
+    name = recode(id, USW00094728 = "CentralPark_NY"),
+    tmin = tmin / 10,
+    tmax = tmax / 10) %>%
+  select(name, id, everything())
+```
+
+
+
+
+```{r}
+weather = 
+lm(tmax ~ tmin, data = weather_df) %>% 
+  broom::tidy()
+
+
+bootstraps =
+weather_df %>% 
+  modelr::bootstrap(n=5000) %>% 
+  mutate(
+    models = map(strap, ~lm(tmax ~ tmin, data=.x)),
+    results = map(models, broom::tidy)) %>% 
+  select(-strap,-models) %>% 
+  unnest(results)
+
+
+
+
+  
+```
+
