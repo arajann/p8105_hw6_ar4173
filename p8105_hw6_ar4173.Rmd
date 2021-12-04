@@ -18,8 +18,8 @@ Importing Data and Checking Missing Data
 
 ```{r}
 birthweight =
-  read_csv(file = "./data/birthweight.csv")
-
+  read_csv(file = "./data/birthweight.csv") %>% 
+  drop_na()
 ```
 
 Data Cleaning
@@ -45,42 +45,51 @@ str(birthweight_df)
 
 Model Building 
 
-Included the following models in my model as I hypothesized they would have an impact on the baby's birth weight 
+Included the following variables in my model as I hypothesized they would have an impact on the baby's birth weight 
 
-gaweeks: Gestational Age in Weeks, I hypothesize that the longer the gestational age is the greater the baby birthweight
-momage: Mother's age at delivery(years), I hypothesize that as the age of the mother increases, the baby's birthweight decreases
-malform: Presence of malformations that could affect weight (0 = absent, 1 = present), I hypothesize that the presence of malformations will decrease the baby's birthweighth on average
-smoken: average number of cigarettes smoked per day during pregnancy, I hypothesize that the greater the average number of smoked ciagrettes per day, the lower the baby birthweight
-smoken*malform: Interaction term between average number of cigarettes smoked and presence of malformations, I hypoethsize the interaction is significant
+gaweeks: Gestational Age in Weeks, I hypothesize that the longer the gestational age is the greater the baby birth weight
+wtgain: mother's weight gain during pregnancy(pounds), I hypothesize that the greater the weight gain during pregnancy, the greater the baby's birth weight
+momage: Mother's age at delivery(years), I hypothesize that as the age of the mother increases, the baby's birth weight decreases
+malform: Presence of malformations that could affect weight (0 = absent, 1 = present), I hypothesize that the presence of malformations will decrease the baby's birth weight on average
+smoken: average number of cigarettes smoked per day during pregnancy, I hypothesize that the greater the average number of smoked cigarettes per day, the lower the baby birth weight
+smoken*malform: Interaction term between average number of cigarettes smoked and presence of malformations, I hypothesize the interaction is significant
 
 ```{r}
-fit_mod= lm(bwt ~ gaweeks +  momage + malform + smoken + (smoken*malform), data = birthweight_df )
+fit_mod= lm(bwt ~ gaweeks+ wtgain + momage + malform + smoken + (smoken*malform), data = birthweight_df )
 fit_mod %>% broom::tidy()
 
-fit_mod %>% 
-  broom::glance()
+fit_mod %>% broom::glance()
 
-fixed_mod = lm(bwt ~ blength + gaweeks, data=birthweight_df)
-interaction_mod = lm(bwt ~ bhead + blength + babysex + bhead*blength + bhead*babysex + blength*babysex, data=birthweight_df)
 ```
 
-From analyzing the p-values and model coefficients, the predictor variables are significant with the exception of malformpresent. Malformpresent was the only variable that did not have a significant p-value (p-value = 0.1225) 
+From analyzing the p-values and model coefficients, the predictor variables are significant with the exception of malformpresent. Malformpresent was the only variable that did not have a significant p-value (p-value = 0.1225). Though the overall r-squared is low for the model(r-squared = 22.92%), the p-value for the model is significant. Furthermore, given background literature and my hypothesis, we will proceed forward with these variables in the model. 
 
 
 Now lets evaluate the residuals
 
 ```{r}
+residual_plot =
 birthweight_df %>% 
   add_predictions(fit_mod) %>% 
   add_residuals(fit_mod) %>% 
   ggplot(aes(x=pred, y=resid)) +
   geom_point()  +
-  geom_smooth(method= "lm", se = FALSE)
+  geom_smooth(method= "lm", se = FALSE) +
+  labs(x= "Predicted Birthweight(grams)", y="Residual",title = "Model Predictions vs Residuals")
+
+residual_plot
 ```
 
-From looking at the graph we see that the residuals are randomly scattered and do not have a definitive trend. Thus 
+From looking at the graph we see that the residuals are somewhat randomly scattered. There is a bit of clustering, which will be noted moving forward in our model building process. 
 
 Now lets compare the created model to the other two models
+
+```{r}
+fixed_mod = lm(bwt ~ blength + gaweeks, data=birthweight_df)
+interaction_mod = lm(bwt ~ bhead + blength + babysex + bhead*blength + bhead*babysex + blength*babysex, data=birthweight_df)
+```
+
+Cross Validate to Comparison Models
 
 ```{r}
 set.seed(7777)
@@ -104,6 +113,7 @@ cv_df =
 
 
 ```{r}
+cv_boxplot =
 cv_df %>% 
   select(starts_with("rmse")) %>% 
   pivot_longer(
@@ -113,12 +123,16 @@ cv_df %>%
     names_prefix = "rmse_") %>% 
   mutate(model = fct_inorder(model)) %>% 
   ggplot(aes(x = model, y = rmse)) + geom_boxplot()
+
+cv_boxplot
 ```
+
+By analyzing the box plot, we see that the RMSE of the constructed model is much greater than compared to the other two models. Based on these results, we should revisit the model we constructed and possibly adjust or add predictor variables. 
 
 
 ## Problem 2
 
-Importing Dataset
+Importing Data set
 
 ```{r}
 weather_df = 
@@ -145,6 +159,8 @@ as_data_frame(bootstrap_weather$strap[[1]])
 
 ```
 
+
+Calculating r^2 and log(β^0∗β^1) for each bootstrap sample
 ```{r}
 bootstrap_results=
 bootstrap_weather %>% 
@@ -152,9 +168,56 @@ bootstrap_weather %>%
     models = map(strap, ~lm(tmax ~ tmin, data=.x)),
     results = map(models, broom::tidy),
     glance = map(models, broom::glance)) %>% 
-  select(-glance,-models) %>% 
-  unnest(glance,models) %>% 
-  group_by(id)
+  select(-strap,-models) %>% 
+  unnest(glance,results) %>% 
+  group_by(.id)
 
 ```
 
+```{r}
+bootstrap = 
+  bootstrap_results %>% 
+  select(.id, estimate, term, r.squared, adj.r.squared) %>% 
+  pivot_wider(names_from = term, values_from = estimate) %>% 
+  janitor::clean_names() %>% 
+  mutate(log_var = log(intercept * tmin)) 
+
+```
+
+Distributions of R^2 and log(β^0∗β^1)
+
+```{r}
+r_squared_distribution = 
+  bootstrap %>% 
+  ggplot(aes(x = r_squared)) +
+  geom_density(alpha = 0.2) +  
+  labs(title = "Distribution of r2")
+
+r_squared_distribution
+```
+
+
+```{r}
+log_var_distribution =
+  bootstrap %>% 
+  ggplot(aes(x = log_var)) +
+  geom_density(alpha = 0.2) +
+  labs(title = "Distribution of log_var")
+
+log_var_distribution
+```
+
+Both distributions look approximately normal. 
+
+```{r}
+r_squared_bounds = 
+  quantile(pull(bootstrap, r_squared), probs = c(.025, 0.975), names = FALSE, type = 4)
+
+log_var_bounds = 
+  quantile(pull(bootstrap, log_var), probs = c(.025, 0.975), names = FALSE, type = 4)
+
+data.frame(estimate = c("r_squared", "log_var"),
+          lower_bound = c(r_squared_bounds[[1]], log_var_bounds[[1]]),
+          upper_bound = c(r_squared_bounds[[2]], log_var_bounds[[2]]))
+```
+The bounds of log_var are 1.97 and 2.06. The bounds for r-squared are 0.89 and 0.93. 
