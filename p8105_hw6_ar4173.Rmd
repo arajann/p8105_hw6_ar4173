@@ -8,30 +8,117 @@ output: github_document
 ```{r setup, include=FALSE}
 library(tidyverse)
 library(modelr)
+library(patchwork)
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
 ## Problem 1
 
+Importing Data and Checking Missing Data 
+
 ```{r}
 birthweight =
   read_csv(file = "./data/birthweight.csv")
 
+```
+
+Data Cleaning
+
+```{r}
+birthweight_df =
 birthweight %>% 
-  janitor::clean_names() %>% 
-  drop_na()
-  
+  mutate(babysex = factor(babysex,
+                          levels = c(1, 2),
+                          labels = c("male", "female"))) %>% 
+  mutate(frace = factor(frace,
+                        levels = c(1, 2, 3, 4, 8, 9),
+                        labels = c("White", "Black", "Asian", "Puerto Rican", "Other", "Unknown"))) %>% 
+  mutate(malform = factor(malform,
+                          levels = c(0, 1),
+                          labels = c("abset", "present"))) %>% 
+  mutate(mrace = factor(mrace,
+                        levels = c(1, 2, 3, 4, 8),
+                        labels = c("White", "Black", "Asian", "Puerto Rican", "Other")))
+
+str(birthweight_df)
+```
+
+Model Building 
+
+Included the following models in my model as I hypothesized they would have an impact on the baby's birth weight 
+
+gaweeks: Gestational Age in Weeks, I hypothesize that the longer the gestational age is the greater the baby birthweight
+momage: Mother's age at delivery(years), I hypothesize that as the age of the mother increases, the baby's birthweight decreases
+malform: Presence of malformations that could affect weight (0 = absent, 1 = present), I hypothesize that the presence of malformations will decrease the baby's birthweighth on average
+smoken: average number of cigarettes smoked per day during pregnancy, I hypothesize that the greater the average number of smoked ciagrettes per day, the lower the baby birthweight
+smoken*malform: Interaction term between average number of cigarettes smoked and presence of malformations, I hypoethsize the interaction is significant
+
+```{r}
+fit_mod= lm(bwt ~ gaweeks +  momage + malform + smoken + (smoken*malform), data = birthweight_df )
+fit_mod %>% broom::tidy()
+
+fit_mod %>% 
+  broom::glance()
+
+fixed_mod = lm(bwt ~ blength + gaweeks, data=birthweight_df)
+interaction_mod = lm(bwt ~ bhead + blength + babysex + bhead*blength + bhead*babysex + blength*babysex, data=birthweight_df)
+```
+
+From analyzing the p-values and model coefficients, the predictor variables are significant with the exception of malformpresent. Malformpresent was the only variable that did not have a significant p-value (p-value = 0.1225) 
+
+
+Now lets evaluate the residuals
+
+```{r}
+birthweight_df %>% 
+  add_predictions(fit_mod) %>% 
+  add_residuals(fit_mod) %>% 
+  ggplot(aes(x=pred, y=resid)) +
+  geom_point()  +
+  geom_smooth(method= "lm", se = FALSE)
+```
+
+From looking at the graph we see that the residuals are randomly scattered and do not have a definitive trend. Thus 
+
+Now lets compare the created model to the other two models
+
+```{r}
+set.seed(7777)
+
+cv_df =
+  crossv_mc(birthweight_df, n=4342, test = 0.2) %>% 
+  mutate(
+    train = map(train, as_tibble),
+    test = map(test, as_tibble)) %>% 
+  mutate(
+    fit_mod  = map(train, ~lm(bwt ~ gaweeks +  momage + malform + smoken + (smoken*malform), data = birthweight_df )),
+    fixed_mod  = map(train, ~lm(bwt ~ blength + gaweeks, data=birthweight_df)),
+    interaction_mod = map(train, ~lm(bwt ~ bhead + blength + babysex + bhead*blength + bhead*babysex + blength*babysex, data=birthweight_df))) %>% 
+  mutate(
+    rmse_fit = map2_dbl(fit_mod, test, ~rmse(model = .x, data = .y)),
+    rmse_fixed = map2_dbl(fixed_mod, test, ~rmse(model = .x, data = .y)),
+    rmse_interaction = map2_dbl(interaction_mod, test, ~rmse(model = .x, data = .y)))
+
+
 ```
 
 
 ```{r}
- fit =
-  lm(bwt ~ )
+cv_df %>% 
+  select(starts_with("rmse")) %>% 
+  pivot_longer(
+    everything(),
+    names_to = "model", 
+    values_to = "rmse",
+    names_prefix = "rmse_") %>% 
+  mutate(model = fct_inorder(model)) %>% 
+  ggplot(aes(x = model, y = rmse)) + geom_boxplot()
 ```
 
 
-
 ## Problem 2
+
+Importing Dataset
 
 ```{r}
 weather_df = 
@@ -48,26 +135,26 @@ weather_df =
 ```
 
 
-
+Bootstrapping Dataset
 
 ```{r}
-weather = 
-lm(tmax ~ tmin, data = weather_df) %>% 
-  broom::tidy()
+bootstrap_weather =
+  bootstrap(weather_df, 5000) 
 
+as_data_frame(bootstrap_weather$strap[[1]])
 
-bootstraps =
-weather_df %>% 
-  modelr::bootstrap(n=5000) %>% 
+```
+
+```{r}
+bootstrap_results=
+bootstrap_weather %>% 
   mutate(
     models = map(strap, ~lm(tmax ~ tmin, data=.x)),
-    results = map(models, broom::tidy)) %>% 
-  select(-strap,-models) %>% 
-  unnest(results)
+    results = map(models, broom::tidy),
+    glance = map(models, broom::glance)) %>% 
+  select(-glance,-models) %>% 
+  unnest(glance,models) %>% 
+  group_by(id)
 
-
-
-
-  
 ```
 
