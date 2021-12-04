@@ -22,20 +22,20 @@ birthweight =
   drop_na()
 ```
 
-Data Cleaning
+Data Cleaning and Converting Numeric Variables to Factor Variables where appropriate
 
 ```{r}
 birthweight_df =
 birthweight %>% 
   mutate(babysex = factor(babysex,
                           levels = c(1, 2),
-                          labels = c("male", "female"))) %>% 
+                          labels = c("Male", "Female"))) %>% 
   mutate(frace = factor(frace,
                         levels = c(1, 2, 3, 4, 8, 9),
                         labels = c("White", "Black", "Asian", "Puerto Rican", "Other", "Unknown"))) %>% 
   mutate(malform = factor(malform,
                           levels = c(0, 1),
-                          labels = c("abset", "present"))) %>% 
+                          labels = c("Absent", "Present"))) %>% 
   mutate(mrace = factor(mrace,
                         levels = c(1, 2, 3, 4, 8),
                         labels = c("White", "Black", "Asian", "Puerto Rican", "Other")))
@@ -43,15 +43,20 @@ birthweight %>%
 str(birthweight_df)
 ```
 
-Model Building 
+### Model Building 
 
-Included the following variables in my model as I hypothesized they would have an impact on the baby's birth weight 
+Included the following variables in my model as I hypothesized they would have an impact on the baby's birth weight based previous literature 
 
 gaweeks: Gestational Age in Weeks, I hypothesize that the longer the gestational age is the greater the baby birth weight
-wtgain: mother's weight gain during pregnancy(pounds), I hypothesize that the greater the weight gain during pregnancy, the greater the baby's birth weight
+
+wtgain: Mother's weight gain during pregnancy(pounds), I hypothesize that the greater the weight gain during pregnancy, the greater the baby's birth weight
+
 momage: Mother's age at delivery(years), I hypothesize that as the age of the mother increases, the baby's birth weight decreases
+
 malform: Presence of malformations that could affect weight (0 = absent, 1 = present), I hypothesize that the presence of malformations will decrease the baby's birth weight on average
-smoken: average number of cigarettes smoked per day during pregnancy, I hypothesize that the greater the average number of smoked cigarettes per day, the lower the baby birth weight
+
+smoken: Average number of cigarettes smoked per day during pregnancy, I hypothesize that the greater the average number of smoked cigarettes per day, the lower the baby birth weight
+
 smoken*malform: Interaction term between average number of cigarettes smoked and presence of malformations, I hypothesize the interaction is significant
 
 ```{r}
@@ -62,10 +67,10 @@ fit_mod %>% broom::glance()
 
 ```
 
-From analyzing the p-values and model coefficients, the predictor variables are significant with the exception of malformpresent. Malformpresent was the only variable that did not have a significant p-value (p-value = 0.1225). Though the overall r-squared is low for the model(r-squared = 22.92%), the p-value for the model is significant. Furthermore, given background literature and my hypothesis, we will proceed forward with these variables in the model. 
+From analyzing the p-values and model coefficients, the predictor variables are significant with the exception of malformpresent. Malformpresent was the only variable that did not have a significant p-value (p-value = 0.163). Though the overall r-squared is low for the model(r-squared = 22.92%), the p-value for the model is significant. Furthermore, given background literature and my hypotheses, we will proceed forward with these variables in the model as we deem these predictor variables are essential for understanding factors that affect baby birthweight. 
 
 
-Now lets evaluate the residuals
+Now let us evaluate the residuals
 
 ```{r}
 residual_plot =
@@ -80,7 +85,7 @@ birthweight_df %>%
 residual_plot
 ```
 
-From looking at the graph we see that the residuals are somewhat randomly scattered. There is a bit of clustering, which will be noted moving forward in our model building process. 
+From looking at the graph we see that the residuals are somewhat randomly scattered around 0, thus the assumption of homoscedasticity is not violated. There is a bit of clustering but this is moreso related to how all the fitted values are not equally frequent.
 
 Now lets compare the created model to the other two models
 
@@ -95,7 +100,7 @@ Cross Validate to Comparison Models
 set.seed(7777)
 
 cv_df =
-  crossv_mc(birthweight_df, n=4342, test = 0.2) %>% 
+  crossv_mc(birthweight_df, n=4342, test = 0.15) %>% 
   mutate(
     train = map(train, as_tibble),
     test = map(test, as_tibble)) %>% 
@@ -127,7 +132,7 @@ cv_df %>%
 cv_boxplot
 ```
 
-By analyzing the box plot, we see that the RMSE of the constructed model is much greater than compared to the other two models. Based on these results, we should revisit the model we constructed and possibly adjust or add predictor variables. 
+By analyzing the box plot, we see that the RMSE of the constructed model is much greater than compared to the other two models. Thus the prediction accuracy of this model is much lower compared to the other two models. Furthermore, based on the box plot, the interaction model has the best prediction accuracy. Therefore, we should revisit the model we constructed and possibly adjust or add predictor variables. 
 
 
 ## Problem 2
@@ -149,7 +154,7 @@ weather_df =
 ```
 
 
-Bootstrapping Dataset
+Bootstrapping the Weather Dataset
 
 ```{r}
 bootstrap_weather =
@@ -160,8 +165,9 @@ as_data_frame(bootstrap_weather$strap[[1]])
 ```
 
 
-Calculating r^2 and log(β^0∗β^1) for each bootstrap sample
+Calculating r^2 and log(β^0 ∗ β^1) for each bootstrap sample
 ```{r}
+
 bootstrap_results=
 bootstrap_weather %>% 
   mutate(
@@ -175,6 +181,7 @@ bootstrap_weather %>%
 ```
 
 ```{r}
+
 bootstrap = 
   bootstrap_results %>% 
   select(.id, estimate, term, r.squared, adj.r.squared) %>% 
@@ -184,7 +191,7 @@ bootstrap =
 
 ```
 
-Distributions of R^2 and log(β^0∗β^1)
+###Distributions of R^2 and log(β^0 ∗ β^1)
 
 ```{r}
 r_squared_distribution = 
